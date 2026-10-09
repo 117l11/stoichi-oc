@@ -1,254 +1,52 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/fair-chemistry-logo-dark-mode.png">
-    <source media="(prefers-color-scheme: light)" srcset="docs/assets/fair-chemistry-logo-light-mode.png">
-    <img src="docs/assets/fair-chemistry-logo-dark-mode.png" width="650" alt="FAIR Chemistry">
-  </picture>
-</p>
+# STOICHI
 
-<h4 align="center">
+STOICHI is a tensor-first, mass-conserving recurrent architecture built from stoichiometric constraints.
 
-![tests](https://github.com/facebookresearch/fairchem/actions/workflows/test.yml/badge.svg?branch=main&event=push)
-![PyPI - Version](https://img.shields.io/pypi/v/fairchem-core)
-![Static Badge](https://img.shields.io/badge/python-3.10%2B-blue)
-[![codecov](https://codecov.io/gh/facebookresearch/fairchem/graph/badge.svg)](https://codecov.io/gh/facebookresearch/fairchem)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15587498.svg)](https://doi.org/10.5281/zenodo.15587498)
+The core invariant is:
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new/facebookresearch/fairchem?quickstart=1)
+- A @ W_rec = A
+- A @ W_in = 0
 
-</h4>
+so the state update preserves conserved mass by construction:
 
-# `fairchem` by the FAIR Chemistry team
+- A @ h[t] = A @ h[t-1]
 
-`fairchem` is the [FAIR](https://ai.meta.com/research/) Chemistry's centralized repository of all its data, models,
-demos, and application efforts for materials science and quantum chemistry.
+## Why this matters
 
-## UMA is now much faster!
+Mass conservation is encoded inside the geometry of the weights, not added as a soft penalty or post-hoc correction. This makes the model:
 
-<p align="center">
-  <a href="benchmarks/omol/README.md">
-    <img src="benchmarks/omol/omol_force_mae_vs_speed.png" width="650" alt="OMol force MAE versus ASE NVE runtime">
-  </a>
-</p>
+- exact by construction
+- domain-agnostic
+- scalable to general conservation-law dynamics
+- naturally compatible with chemistry, materials, reaction systems, and other constrained processes
 
-The vertical axis is force MAE (meV/Å) on the public OMol25 validation set; the
-horizontal axis is mean runtime (ms/step) for an ASE NVE step on a water system
-using an NVIDIA H200. See the
-[benchmark details and reproduction scripts](benchmarks/omol/README.md)
-for the full setup.
+## Quick usage
 
-For more OMol model accuracy benchmarks, you can also see the
-[FAIR Chemistry leaderboard](https://huggingface.co/spaces/facebook/fairchem_leaderboard).
+```python
+import torch
+from stoichi import StoichiometricRNN
 
-Please use this logo for references to [UMA](docs/assets/uma-diagram-light-mode.png)!
+A = torch.tensor(
+    [
+        [2.0, 2.0, 0.0],
+        [1.0, 0.0, 2.0],
+    ],
+    dtype=torch.float64,
+)
 
-## Latest news
-September 2026 - Read our new paper on
-[quantum-accurate atomistic modeling of enzyme catalysis using a machine-learned potential](https://arxiv.org/abs/2609.09293). Also, UMA inference is now much faster with
-[`fairchem-core` 2.22.0](https://github.com/facebookresearch/fairchem/releases/tag/fairchem_core-2.22.0).
+model = StoichiometricRNN(A, state_dim=3, input_dim=3, num_layers=2)
+x_seq = torch.randn(32, 3, dtype=torch.float64)
+h0 = torch.tensor([10.0, 5.0, 2.0], dtype=torch.float64)
 
-<img src="https://gist.githubusercontent.com/rayg1234/bc9c41122ee5faa546b561923ec5d477/raw/75fdb26063309f31514a6ddf3ba39fd87776a3e7/ndpk_atp_to_adp_3dmol_1200px.gif" alt="NDPK-catalyzed ATP-to-ADP reaction" width="1000">
+h_seq, h_final = model(x_seq, h0=h0)
+print(h_seq.shape)
+print(h_final.shape)
+```
 
-June 2026 - UMA playground released, try the interactive [educational demo](https://aidemos.atmeta.com/uma) here yourself!
+## Validation
 
-<img src="https://gist.githubusercontent.com/rayg1234/bc9c41122ee5faa546b561923ec5d477/raw/b088b0eaf5f0253966458094afa3f6cac8f72b8d/uma_playground_demo.gif" alt="UMA playground demo" width="1000">
+Run:
 
-March 2026 - UMA-1.2 released! ~50% faster, ~40% more accurate on Open Molecules test set, and expanded data coverage for catalysts (oxides and interfaces), molecules, and polymers!
-
-Oct 2025 - [check out our seamless Multi-node, Multi-GPU and LAMMPs interfaces to run large scale dynamics!](#multi-gpu-inference-and-lammps)
-
-June 2025 - UMA/OMol first released! Read about the [UMA model and OMol25 dataset](https://ai.meta.com/blog/meta-fair-science-new-open-source-releases/) release.
-
-## Materials Project and OMat24 DFT settings
-UMA models and legacy inorganic bulk models trained using OMat24 are trained with DFT and DFT+U total energy labels.
-These are not compatible with Materials Project calculations. If you are using UMA or models trained on OMat24 only
-for such calculations, you can find a OMat24 specific calculations of reference unary compounds and MP2020-style
-anion and GGA/GGA+U mixing corrections in the [OMat24 Hugging Face repo](https://huggingface.co/datasets/facebook/OMAT24).
-Do not use MP2020 corrections or use the MP references compounds when using OMat24-trained models. Additional care
-must be taken when computing energy differences, such as formation and energy above hull and comparing with calculations
-in the Materials Project since DFT pseudopotentials are different and magnetic ground states may differ as well.
-
-## Installation
-Although not required, we highly recommend installing using a package manager and virtualenv such as [uv](https://docs.astral.sh/uv/getting-started/installation/#standalone-installer), it is much faster and better at resolving dependencies than standalone pip.
-
-Install fairchem-core using pip
 ```bash
-pip install fairchem-core
+pytest -q tests/test_stoichiometric_rnn.py
 ```
-
-If you want to contribute or make modifications to the code, clone the repo and install in edit mode
-```bash
-git clone git@github.com:facebookresearch/fairchem.git
-
-pip install -e fairchem/packages/fairchem-core[dev]
-```
-
-## Quick Start
-The easiest way to use pretrained models is via the [ASE](https://wiki.fysik.dtu.dk/ase/) `FAIRChemCalculator`.
-A single uma model can be used for a wide range of applications in chemistry and materials science by picking the
-appropriate task name for domain specific prediction.
-
-### Instantiate a calculator from a pretrained model
-Make sure you have a Hugging Face account, have already applied for model access to the
-[UMA model repository](https://huggingface.co/facebook/UMA), and have logged in to Hugging Face using an access token.
-You can use the following to save an auth token,
-```bash
-huggingface-cli login
-```
-
-Models are referenced by their name, below are the currently supported models:
-
-| Model Name | Description |
-|---|---|
-| uma-s-1p2p1 | Latest version of the UMA small model, fastest of the UMA models while still SOTA on most benchmarks (6.6M/290M active/total params) |
-| uma-m-1p1 | Best in class UMA model across all metrics, but slower and more memory intensive than uma-s (50M/1.4B active/total params) |
-
-### Set the task for your application and calculate
-
-- **oc20:** use this for catalysis
-- **oc22:** use this for oxide catalysis (1p2 only)
-- **oc25:** use this for (electro)catalysis (1p2 only)
-- **omat:** use this for inorganic materials
-- **omol:** use this for molecules+polymers
-- **odac:** use this for MOFs
-- **omc:** use this for molecular crystals
-
-#### Relax an adsorbate on a catalytic surface,
-```python
-from ase.build import fcc100, add_adsorbate, molecule
-from ase.optimize import LBFGS
-from fairchem.core import pretrained_mlip, FAIRChemCalculator
-
-predictor = pretrained_mlip.get_predict_unit("uma-s-1p2p1", device="cuda")
-calc = FAIRChemCalculator(predictor, task_name="oc20")
-
-# Set up your system as an ASE atoms object
-slab = fcc100("Cu", (3, 3, 3), vacuum=8, periodic=True)
-adsorbate = molecule("CO")
-add_adsorbate(slab, adsorbate, 2.0, "bridge")
-
-slab.calc = calc
-
-# Set up LBFGS dynamics object
-opt = LBFGS(slab)
-opt.run(0.05, 100)
-```
-
-#### Relax an inorganic crystal,
-```python
-from ase.build import bulk
-from ase.optimize import FIRE
-from ase.filters import FrechetCellFilter
-from fairchem.core import pretrained_mlip, FAIRChemCalculator
-
-predictor = pretrained_mlip.get_predict_unit("uma-s-1p2p1", device="cuda")
-calc = FAIRChemCalculator(predictor, task_name="omat")
-
-atoms = bulk("Fe")
-atoms.calc = calc
-
-opt = FIRE(FrechetCellFilter(atoms))
-opt.run(0.05, 100)
-```
-
-#### Run Molecular Dynamics (MD)
-Note: `pretrained_mlip.get_predict_unit()` currently uses a seed to set the global state of the numpy RNG. In order to obtain different trajectories for different runs of the following code, we have to set a random seed as shown below:
-```python
-import numpy as np
-from ase import units
-from ase.io import Trajectory
-from ase.md.langevin import Langevin
-from ase.build import molecule
-from fairchem.core import pretrained_mlip, FAIRChemCalculator
-
-seed = np.random.randint(0, np.iinfo(np.int32).max, dtype=int)
-# we recommend using turbo mode for MD to get the best speed
-predictor = pretrained_mlip.get_predict_unit(
-    "uma-s-1p2p1", device="cuda", seed=seed, inference_settings="turbo"
-)
-calc = FAIRChemCalculator(predictor, task_name="omol")
-
-atoms = molecule("H2O")
-atoms.calc = calc
-
-dyn = Langevin(
-    atoms,
-    timestep=0.1 * units.fs,
-    temperature_K=400,
-    friction=0.001 / units.fs,
-)
-trajectory = Trajectory("my_md.traj", "w", atoms)
-dyn.attach(trajectory.write, interval=1)
-dyn.run(steps=1000)
-```
-
-#### Calculate a spin gap,
-```python
-from ase.build import molecule
-from fairchem.core import pretrained_mlip, FAIRChemCalculator
-
-predictor = pretrained_mlip.get_predict_unit("uma-s-1p2p1", device="cuda")
-
-#  singlet CH2
-singlet = molecule("CH2_s1A1d")
-singlet.info.update({"spin": 1, "charge": 0})
-singlet.calc = FAIRChemCalculator(predictor, task_name="omol")
-
-#  triplet CH2
-triplet = molecule("CH2_s3B1d")
-triplet.info.update({"spin": 3, "charge": 0})
-triplet.calc = FAIRChemCalculator(predictor, task_name="omol")
-
-triplet.get_potential_energy() - singlet.get_potential_energy()
-```
-
-#### Multi-GPU Inference and LAMMPs
-If you have multiple gpus (or multiple nodes), we handle all the parallelism for you under the hood by a single flag (workers=N). This is also compatible with LAMMPs to perform large scale MD. See our [docs](https://facebookresearch.github.io/fairchem/summary) for more details. This requires the Ray package to be installed and comes with the extras bundle.
-```
-pip install fairchem-core[extras]
-```
-
-```python
-import time
-
-import numpy as np
-from ase import units
-from ase.md.langevin import Langevin
-from fairchem.core import pretrained_mlip, FAIRChemCalculator
-
-from fairchem.core.datasets.common_structures import get_fcc_crystal_by_num_atoms
-
-seed = np.random.randint(0, np.iinfo(np.int32).max, dtype=int)
-predictor = pretrained_mlip.get_predict_unit(
-    "uma-s-1p2p1",
-    inference_settings="turbo",
-    device="cuda",
-    workers=8,
-    seed=seed,
-)
-calc = FAIRChemCalculator(predictor, task_name="omat")
-
-atoms = get_fcc_crystal_by_num_atoms(8000)
-atoms.calc = calc
-
-dyn = Langevin(
-    atoms,
-    timestep=0.1 * units.fs,
-    temperature_K=400,
-    friction=0.001 / units.fs,
-)
-# warmup 10 steps
-dyn.run(steps=10)
-start_time = time.time()
-dyn.attach(
-    lambda: print(
-        f"Step: {dyn.get_number_of_steps()}, E: {atoms.get_potential_energy():.3f} eV, "
-        f"QPS: {dyn.get_number_of_steps()/(time.time()-start_time):.2f}"
-    ),
-    interval=1,
-)
-dyn.run(steps=1000)
-```
-
-### LICENSE
-`fairchem` is available under a [MIT License](LICENSE.md). Models/checkpoint licenses vary by application area.
