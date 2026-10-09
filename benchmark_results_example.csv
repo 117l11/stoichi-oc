@@ -1,0 +1,5 @@
+model,task,device,precision,max_mass_drift,mean_mass_drift,energy_mae,force_mae,stress_mae,runtime_ms,throughput_samples_per_s,peak_memory_mb,nan_rate,status
+STOICHI,conservation,cpu,float64,2.1e-15,8.7e-16,,,,,1.8,560.0,,0.0,PASS
+STOICHI,synthetic_molecule,cpu,float64,1.5e-15,6.2e-16,0.014,0.021,,2.1,480.0,,0.0,PASS
+STOICHI,synthetic_crystal_dynamics,cpu,float64,3.2e-15,1.1e-15,0.018,0.025,,2.4,420.0,,0.0,PASS
+FAIRChem_baseline,synthetic_molecule,cpu,float32,1e-8,5e-9,0.012,0.019,,1.4,710.0,,0.0,PASS
